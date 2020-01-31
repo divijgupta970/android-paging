@@ -34,7 +34,8 @@ import kotlinx.coroutines.flow.asFlow
 @ExperimentalCoroutinesApi
 class GithubRepository(private val service: GithubService) {
 
-    // keep the list of responses
+    // keep channel of all results received so far. The channel allows us to broadcast updates so
+    // the subscriber will have the latest data
     private val inMemoryCache = ConflatedBroadcastChannel<RepoSearchResult>()
 
     // keep the last requested page. When the request is successful, increment the page number.
@@ -44,9 +45,10 @@ class GithubRepository(private val service: GithubService) {
     private var isRequestInProgress = false
 
     /**
-     * Search repositories whose names match the query.
+     * Search repositories whose names match the query, exposed as a stream of data that will emit
+     * every time we get more data from the network.
      */
-    suspend fun search(query: String): Flow<RepoSearchResult> {
+    suspend fun getSearchResultStream(query: String): Flow<RepoSearchResult> {
         Log.d("GithubRepository", "New query: $query")
         lastRequestedPage = 1
         requestAndSaveData(query)
@@ -72,7 +74,7 @@ class GithubRepository(private val service: GithubService) {
         inMemoryCache.valueOrNull?.let { allResults.addAll(it.data) }
         allResults.addAll(apiResponse.data)
 
-        inMemoryCache.offer(RepoSearchResult(allResults, apiResponse.networkErrors))
+        inMemoryCache.offer(RepoSearchResult(allResults, apiResponse.error))
 
         lastRequestedPage++
         isRequestInProgress = false
